@@ -822,6 +822,8 @@ class RTCUtils extends Listenable {
                 }
             };
 
+            self.recalculatePanNodePositionsInterval = setInterval(this.recalculatePanNodePositions, 1000);
+
             this.attachMediaStream
                 = wrapAttachMediaStream((element, stream) => {
                     if (element) {
