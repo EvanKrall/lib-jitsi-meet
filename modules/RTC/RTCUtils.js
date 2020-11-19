@@ -806,11 +806,63 @@ class RTCUtils extends Listenable {
         if (browser.usesNewGumFlow()) {
             this.RTCPeerConnectionType = RTCPeerConnection;
 
+            this.elementsAndPanNodes = {};
+            window.elementsAndPanNodes = this.elementsAndPanNodes;
+            this.recalculatePanNodePositions = function() {
+                for (let id in elementsAndPanNodes) {
+                    var item = elementsAndPanNodes[id];
+                    var element = item[0];
+                    var panNode = item[1];
+                    var boundrect = element.parentElement.getBoundingClientRect();
+                    panNode.setPosition(
+                        (boundrect.left + boundrect.right - window.innerWidth) / 2 / window.innerWidth * 8,
+                        (boundrect.top + boundrect.bottom - window.innerHeight) / 2 / window.innerWidth * 8,
+                        8,
+                    );
+                }
+            };
+
             this.attachMediaStream
                 = wrapAttachMediaStream((element, stream) => {
                     if (element) {
-                        element.srcObject = stream;
+                        if (stream && stream.getAudioTracks().length) {
+                            var audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                            var source = audioCtx.createMediaStreamSource(stream);
+                            var panNode = audioCtx.createPanner();
+                            var dest = audioCtx.createMediaStreamDestination();
+
+                            // this Audio object is necessary for some reason. Without it, our stream's audio
+                            // is inaudible through the audio graph.
+                            var audio = new Audio();
+                            audio.srcObject = stream;
+
+                            source.connect(panNode);
+                            panNode.connect(dest);
+                            element.srcObject = dest.stream;
+
+                            panNode.panningModel = 'HRTF';
+                            panNode.distanceModel = 'inverse';
+                            panNode.refDistance = 8;
+                            panNode.maxDistance = 10000;
+                            panNode.rolloffFactor = 1;
+                            panNode.coneInnerAngle = 360;
+                            panNode.coneOuterAngle = 0;
+                            panNode.coneOuterGain = 0;
+                            panNode.setOrientation(1, 0, 0);
+
+                            window.element = element;
+                            window.panNode = panNode;
+                            window.audioCtx = audioCtx;
+                            window.source = source;
+                            window.dest = dest;
+                            window.stream = stream;
+
+                            this.elementsAndPanNodes[stream.id] = [element, panNode];
+                        } else {
+                            element.srcObject = stream;
+                        }
                     }
+                    this.recalculatePanNodePositions();
                 });
 
             this.getStreamID = ({ id }) => id;
